@@ -1,0 +1,2892 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Spyglass API",
+    "version": "2.0.0",
+    "description": "Query Spyglass ad intelligence over HTTP.\n\n## Authentication\nSend your key as a bearer token: `Authorization: Bearer sg_live_...`.\nCreate and revoke keys in Settings → API. A key is scoped to the\nteam it was created for, and stops working if you leave that team.\n\n## Billing\nCalls draw on the same monthly credits as the rest of Spyglass. Most\nendpoints charge per row returned. Bound what a call costs with\n`limit` on /brands, /creators and /media,\n/account/{id}/insights and /account/{id}/landing-pages. POST /comments\ncharges per successful comment page fetch. POST /account/index and\nGET /account/{id}/index-status, GET /taxonomies, and\nGET /team/credit-usage are free.\nRequests that fail validation, auth, or the credit check are never charged.\n\n/media, and /brands or /creators searched by `query` (which runs a\nlanguage model), are charged a minimum of one row even when nothing\nmatches.\n\n## Rate limits\nEach endpoint has its own per-minute limit, counted per user and\nlisted on the operation. Exceeding it returns 429 with a Retry-After\nheader."
+  },
+  "servers": [
+    {
+      "url": "https://api.spyglass.so/v2"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Search",
+      "description": "Search accounts, ads, and related data."
+    },
+    {
+      "name": "Indexing",
+      "description": "Add an account we do not have yet, then poll until ready."
+    },
+    {
+      "name": "Account",
+      "description": "The API key's team: credits and the billing period."
+    }
+  ],
+  "paths": {
+    "/brands": {
+      "post": {
+        "operationId": "searchBrandsV2",
+        "tags": [
+          "Search"
+        ],
+        "x-mint": {
+          "href": "/brands"
+        },
+        "summary": "Search brands",
+        "description": "Find brands (advertisers) only.\n\nSend one search field. Each field is its own mode:\n\n- **Query** (`query`). A natural-language brief. Runs a language model and\n  ranks by relevance, so `sortBy` is ignored. Bills at least one row even\n  when nothing matches.\n- **Name** (`names`). Fuzzy-matches account names (a case-insensitive contains\n  match). Pass every name in one array.\n- **ID** (`brandIds`). Looks up known ids. Missing ids are omitted and listed\n  in `unmatchedIds`. `limit` and `offset` are ignored.\n- **Instagram** (`igUsername`). Case-insensitive contains match on the\n  handle. A leading `@` is ignored.\n- **TikTok** (`tiktokUsername`). Same match on the TikTok handle.\n\nIf a request includes more than one of these fields, only the highest\npriority field is used. The rest are ignored:\n\n1. `brandIds`\n2. `igUsername` or `tiktokUsername` (if both are set, either handle can match)\n3. `names`\n4. `query`\n\nOne exception: `query` together with `names` uses both. `names` narrows the\nset, and `query` ranks inside it.\n\n`limit` (default 20, max 100) caps the rows returned, and the cost, for\nevery mode except ID.\n\nLimited to 120 requests per minute per user.\nCosts 2,000 microdollars ($0.0020) per brand returned, charged against your plan's monthly credits. The count field is what you were charged for.\nA `query` search runs a language model, so it bills a minimum of one\nrow even when nothing matches.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "brandIds": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Brand id given as a platform string or uuid"
+                    }
+                  },
+                  "names": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 200
+                    }
+                  },
+                  "igUsername": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "tiktokUsername": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "query": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "location": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "minFollowers": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "maxFollowers": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "sortBy": {
+                    "type": "string",
+                    "enum": [
+                      "NAME",
+                      "MOST_FOLLOWERS",
+                      "LEAST_FOLLOWERS",
+                      "MOST_VIEWS",
+                      "HIGHEST_ENGAGEMENT",
+                      "MOST_ACTIVE_ADS"
+                    ]
+                  },
+                  "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9999
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "taxonomy": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  }
+                }
+              },
+              "example": {
+                "names": [
+                  "Nike"
+                ],
+                "limit": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Matching brands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "brands": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "BRAND"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "facebookAdLibraryId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "category": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "location": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "language": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "verified": {
+                            "type": "boolean"
+                          },
+                          "facebookUsername": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "likes": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "igUsername": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "igFollowers": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "igEngagementRate": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "tiktokUsername": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "tiktokFollowers": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "thumbnailUrl": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "facebookAdLibraryId",
+                          "name",
+                          "summary",
+                          "category",
+                          "location",
+                          "language",
+                          "verified",
+                          "facebookUsername",
+                          "likes",
+                          "igUsername",
+                          "igFollowers",
+                          "igEngagementRate",
+                          "tiktokUsername",
+                          "tiktokFollowers",
+                          "thumbnailUrl"
+                        ]
+                      }
+                    },
+                    "unmatchedIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "brands"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/creators": {
+      "post": {
+        "operationId": "searchCreators",
+        "tags": [
+          "Search"
+        ],
+        "x-mint": {
+          "href": "/creators"
+        },
+        "summary": "Search creators",
+        "description": "Find creators only.\n\nThey also accept profile filters: `gender`, `ageRange`, `ethnicity`, `location` and `language`.\n\nSend one search field. Each field is its own mode:\n\n- **Query** (`query`). A natural-language brief. Runs a language model and\n  ranks by relevance, so `sortBy` is ignored. Bills at least one row even\n  when nothing matches.\n- **Name** (`names`). Fuzzy-matches account names (a case-insensitive contains\n  match). Pass every name in one array.\n- **ID** (`brandIds`). Looks up known ids. Missing ids are omitted and listed\n  in `unmatchedIds`. `limit` and `offset` are ignored.\n- **Instagram** (`igUsername`). Case-insensitive contains match on the\n  handle. A leading `@` is ignored.\n- **TikTok** (`tiktokUsername`). Same match on the TikTok handle.\n\nIf a request includes more than one of these fields, only the highest\npriority field is used. The rest are ignored:\n\n1. `brandIds`\n2. `igUsername` or `tiktokUsername` (if both are set, either handle can match)\n3. `names`\n4. `query`\n\nOne exception: `query` together with `names` uses both. `names` narrows the\nset, and `query` ranks inside it.\n\n`limit` (default 20, max 100) caps the rows returned, and the cost, for\nevery mode except ID.\n\nLimited to 120 requests per minute per user.\nCosts 2,000 microdollars ($0.0020) per creator returned, charged against your plan's monthly credits. The count field is what you were charged for.\nA `query` search runs a language model, so it bills a minimum of one\nrow even when nothing matches.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "brandIds": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ],
+                      "description": "Brand id given as a platform string or uuid"
+                    }
+                  },
+                  "names": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 200
+                    }
+                  },
+                  "igUsername": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "tiktokUsername": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "query": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "location": {
+                    "type": "string"
+                  },
+                  "minFollowers": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "maxFollowers": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "sortBy": {
+                    "type": "string",
+                    "enum": [
+                      "NAME",
+                      "MOST_FOLLOWERS",
+                      "LEAST_FOLLOWERS",
+                      "MOST_VIEWS",
+                      "HIGHEST_ENGAGEMENT",
+                      "MOST_ACTIVE_ADS"
+                    ]
+                  },
+                  "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9999
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "ethnicity": {
+                    "type": "string",
+                    "enum": [
+                      "White",
+                      "Black",
+                      "Asian",
+                      "Hispanic",
+                      "Middle Eastern",
+                      "Indigenous",
+                      "Pacific Islander"
+                    ]
+                  },
+                  "gender": {
+                    "type": "string",
+                    "enum": [
+                      "male",
+                      "female",
+                      "other"
+                    ]
+                  },
+                  "ageRange": {
+                    "type": "string",
+                    "enum": [
+                      "0-18",
+                      "18-24",
+                      "25-34",
+                      "35-44",
+                      "45-54",
+                      "55-64",
+                      "65+"
+                    ]
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "English",
+                      "Spanish",
+                      "French",
+                      "German",
+                      "Italian",
+                      "Portuguese",
+                      "Russian",
+                      "Chinese",
+                      "Cantonese",
+                      "Japanese",
+                      "Korean",
+                      "Arabic",
+                      "Hindi",
+                      "Dutch",
+                      "Polish",
+                      "Turkish",
+                      "Vietnamese",
+                      "Thai",
+                      "Burmese",
+                      "Khmer",
+                      "Lao",
+                      "Indonesian",
+                      "Hebrew",
+                      "Swedish",
+                      "Norwegian",
+                      "Danish",
+                      "Finnish",
+                      "Farsi",
+                      "Fijian",
+                      "Greek",
+                      "Czech",
+                      "Hungarian",
+                      "Romanian",
+                      "Ukrainian",
+                      "Malay",
+                      "Tagalog",
+                      "Filipino",
+                      "Bengali",
+                      "Serbian",
+                      "Croatian",
+                      "Bulgarian",
+                      "Slovak",
+                      "Slovenian",
+                      "Estonian",
+                      "Latvian",
+                      "Lithuanian",
+                      "Persian",
+                      "Swahili",
+                      "Amharic",
+                      "Assamese",
+                      "Urdu",
+                      "Afrikaans",
+                      "Basque",
+                      "Catalan",
+                      "Icelandic",
+                      "Georgian",
+                      "Albanian",
+                      "Armenian",
+                      "Azerbaijani",
+                      "Bosnian",
+                      "Galician",
+                      "Gujarati",
+                      "Haitian Creole",
+                      "Kannada",
+                      "Kazakh",
+                      "Kyrgyz",
+                      "Latin",
+                      "Macedonian",
+                      "Malayalam",
+                      "Marathi",
+                      "Mizo",
+                      "Montenegrin",
+                      "Nepali",
+                      "Sinhala",
+                      "Tamil",
+                      "Telugu",
+                      "Tulu",
+                      "Punjabi",
+                      "Welsh",
+                      "Irish",
+                      "Maltese",
+                      "Yoruba",
+                      "Zulu",
+                      "ASL",
+                      "Asturian",
+                      "Bambara",
+                      "Belarusian",
+                      "Bhojpuri",
+                      "Bisaya",
+                      "Bodo",
+                      "Cebuano",
+                      "Chechen",
+                      "Cherokee",
+                      "Chichewa",
+                      "Coptic",
+                      "Cornish",
+                      "Dari",
+                      "Dhivehi",
+                      "Esperanto",
+                      "Ewe",
+                      "Faroese",
+                      "Frisian",
+                      "Guarani",
+                      "Hausa",
+                      "Hawaiian",
+                      "Hiligaynon",
+                      "Hmong",
+                      "Igbo",
+                      "Ilocano",
+                      "Jamaican Patois",
+                      "Javanese",
+                      "Kashmiri",
+                      "Kikuyu",
+                      "Kinyarwanda",
+                      "Konkani",
+                      "Kurdish",
+                      "Lingala",
+                      "Luxembourgish",
+                      "Luganda",
+                      "Malagasy",
+                      "Manipuri",
+                      "Maori",
+                      "Mongolian",
+                      "Nigerian Pidgin",
+                      "Nyanja",
+                      "Odia",
+                      "Oromo",
+                      "Papiamento",
+                      "Pashto",
+                      "Quechua",
+                      "Samoan",
+                      "Sanskrit",
+                      "Scottish Gaelic",
+                      "Sepedi",
+                      "Shona",
+                      "Sindhi",
+                      "Somali",
+                      "Sotho",
+                      "Sundanese",
+                      "Tajik",
+                      "Tamazight",
+                      "Tetum",
+                      "Tibetan",
+                      "Tongan",
+                      "Tsonga",
+                      "Tswana",
+                      "Twi",
+                      "Uzbek",
+                      "Wolof",
+                      "Xhosa",
+                      "Khasi"
+                    ]
+                  }
+                }
+              },
+              "example": {
+                "igUsername": "charlidamelio",
+                "gender": "female",
+                "limit": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Matching creators.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "creators": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "CREATOR"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "facebookAdLibraryId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "verified": {
+                            "type": "boolean"
+                          },
+                          "igUsername": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "igFollowers": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "igEngagementRate": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "tiktokUsername": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "tiktokFollowers": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "tiktokEngagementRate": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "thumbnailUrl": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "location": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "language": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "ethnicity": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "gender": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "ageRange": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "facebookAdLibraryId",
+                          "name",
+                          "summary",
+                          "verified",
+                          "igUsername",
+                          "igFollowers",
+                          "igEngagementRate",
+                          "tiktokUsername",
+                          "tiktokFollowers",
+                          "tiktokEngagementRate",
+                          "thumbnailUrl",
+                          "location",
+                          "language",
+                          "ethnicity",
+                          "gender",
+                          "ageRange"
+                        ]
+                      }
+                    },
+                    "unmatchedIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "creators"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/account/{id}": {
+      "get": {
+        "operationId": "getAccount",
+        "tags": [
+          "Search"
+        ],
+        "summary": "Get one account",
+        "description": "Fetch a single brand or creator by id. The `type` field tells you\nwhich one you got: `BRAND` or `CREATOR`, and the creator-only fields\n(`gender`, `ageRange`, ...) are present only on `CREATOR`.\n\nLimited to 120 requests per minute per user.\nCosts 2,000 microdollars ($0.0020) per account returned, charged against your plan's monthly credits.\nAn id that matches nothing returns 404 and is free.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Brand or creator id returned by POST /brands or POST /creators.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "BRAND"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "facebookAdLibraryId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "category": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "location": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "language": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "verified": {
+                          "type": "boolean"
+                        },
+                        "facebookUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "likes": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "igUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "igFollowers": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "igEngagementRate": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "tiktokUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "tiktokFollowers": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "thumbnailUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "facebookAdLibraryId",
+                        "name",
+                        "summary",
+                        "category",
+                        "location",
+                        "language",
+                        "verified",
+                        "facebookUsername",
+                        "likes",
+                        "igUsername",
+                        "igFollowers",
+                        "igEngagementRate",
+                        "tiktokUsername",
+                        "tiktokFollowers",
+                        "thumbnailUrl"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "CREATOR"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "facebookAdLibraryId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "verified": {
+                          "type": "boolean"
+                        },
+                        "igUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "igFollowers": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "igEngagementRate": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "tiktokUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "tiktokFollowers": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "tiktokEngagementRate": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "thumbnailUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "location": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "language": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "ethnicity": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "gender": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "ageRange": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "facebookAdLibraryId",
+                        "name",
+                        "summary",
+                        "verified",
+                        "igUsername",
+                        "igFollowers",
+                        "igEngagementRate",
+                        "tiktokUsername",
+                        "tiktokFollowers",
+                        "tiktokEngagementRate",
+                        "thumbnailUrl",
+                        "location",
+                        "language",
+                        "ethnicity",
+                        "gender",
+                        "ageRange"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/BrandNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/taxonomies": {
+      "get": {
+        "operationId": "searchTaxonomies",
+        "tags": [
+          "Search"
+        ],
+        "x-mint": {
+          "href": "/taxonomies"
+        },
+        "summary": "Search product taxonomies",
+        "description": "Find taxonomy paths you can pass to POST /media as `taxonomy`.\n`query` is a product or category phrase. Each path is a string\nsuch as `Apparel > Footwear > Sneakers`.\n\nLimited to 120 requests per minute per user.\nThis call is free and does not use credits.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "example": "running shoes"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching taxonomy paths.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "paths",
+                    "count"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/media": {
+      "post": {
+        "operationId": "getMediaV2",
+        "tags": [
+          "Search"
+        ],
+        "x-mint": {
+          "href": "/media"
+        },
+        "summary": "Get ad creatives and posts",
+        "description": "Return creatives. Pass `brandId` to scope to one brand or creator,\nor omit it to search the whole corpus. Without `brandId`,\n`query` is required.\n\nLimited to 120 requests per minute per user.\nCosts 1,000 microdollars ($0.0010) per creative returned, charged against your plan's monthly credits. The count field is what you were charged for.\nThe call bills a minimum of one row even when nothing matches. In that\ncase `count` is 0 but you are charged for one row.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "brandId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "Brand id given as a platform string or uuid"
+                  },
+                  "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "channel": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "META_AD",
+                        "INSTAGRAM",
+                        "TIKTOK"
+                      ]
+                    }
+                  },
+                  "format": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "DPA",
+                        "VIDEO",
+                        "CAROUSEL",
+                        "IMAGE",
+                        "DCO"
+                      ]
+                    }
+                  },
+                  "duration": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "0-10",
+                        "10-30",
+                        "30-60",
+                        "60+"
+                      ]
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ACTIVE",
+                      "INACTIVE",
+                      "ALL"
+                    ]
+                  },
+                  "categories": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "Announcement",
+                        "Before and After",
+                        "Brand Story",
+                        "Case Study",
+                        "Comparison",
+                        "Discount or Offer",
+                        "Explainer",
+                        "Founder Story",
+                        "Interface",
+                        "Meme",
+                        "Negative Review",
+                        "Press",
+                        "Question",
+                        "Quiz",
+                        "Quote",
+                        "Social Proof",
+                        "Testimonial",
+                        "Fake Interface",
+                        "Street Interview",
+                        "Unboxing",
+                        "GRWM",
+                        "Day in the life",
+                        "Storytime",
+                        "Skit",
+                        "Reply",
+                        "Text Overlay",
+                        "Greenscreen"
+                      ]
+                    }
+                  },
+                  "taxonomy": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "funnelStage": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "UNAWARE",
+                        "PROBLEM_AWARE",
+                        "SOLUTION_AWARE",
+                        "PRODUCT_AWARE",
+                        "MOST_AWARE"
+                      ]
+                    }
+                  },
+                  "language": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "English",
+                        "Spanish",
+                        "French",
+                        "German",
+                        "Italian",
+                        "Portuguese",
+                        "Russian",
+                        "Chinese",
+                        "Cantonese",
+                        "Japanese",
+                        "Korean",
+                        "Arabic",
+                        "Hindi",
+                        "Dutch",
+                        "Polish",
+                        "Turkish",
+                        "Vietnamese",
+                        "Thai",
+                        "Burmese",
+                        "Khmer",
+                        "Lao",
+                        "Indonesian",
+                        "Hebrew",
+                        "Swedish",
+                        "Norwegian",
+                        "Danish",
+                        "Finnish",
+                        "Farsi",
+                        "Fijian",
+                        "Greek",
+                        "Czech",
+                        "Hungarian",
+                        "Romanian",
+                        "Ukrainian",
+                        "Malay",
+                        "Tagalog",
+                        "Filipino",
+                        "Bengali",
+                        "Serbian",
+                        "Croatian",
+                        "Bulgarian",
+                        "Slovak",
+                        "Slovenian",
+                        "Estonian",
+                        "Latvian",
+                        "Lithuanian",
+                        "Persian",
+                        "Swahili",
+                        "Amharic",
+                        "Assamese",
+                        "Urdu",
+                        "Afrikaans",
+                        "Basque",
+                        "Catalan",
+                        "Icelandic",
+                        "Georgian",
+                        "Albanian",
+                        "Armenian",
+                        "Azerbaijani",
+                        "Bosnian",
+                        "Galician",
+                        "Gujarati",
+                        "Haitian Creole",
+                        "Kannada",
+                        "Kazakh",
+                        "Kyrgyz",
+                        "Latin",
+                        "Macedonian",
+                        "Malayalam",
+                        "Marathi",
+                        "Mizo",
+                        "Montenegrin",
+                        "Nepali",
+                        "Sinhala",
+                        "Tamil",
+                        "Telugu",
+                        "Tulu",
+                        "Punjabi",
+                        "Welsh",
+                        "Irish",
+                        "Maltese",
+                        "Yoruba",
+                        "Zulu",
+                        "ASL",
+                        "Asturian",
+                        "Bambara",
+                        "Belarusian",
+                        "Bhojpuri",
+                        "Bisaya",
+                        "Bodo",
+                        "Cebuano",
+                        "Chechen",
+                        "Cherokee",
+                        "Chichewa",
+                        "Coptic",
+                        "Cornish",
+                        "Dari",
+                        "Dhivehi",
+                        "Esperanto",
+                        "Ewe",
+                        "Faroese",
+                        "Frisian",
+                        "Guarani",
+                        "Hausa",
+                        "Hawaiian",
+                        "Hiligaynon",
+                        "Hmong",
+                        "Igbo",
+                        "Ilocano",
+                        "Jamaican Patois",
+                        "Javanese",
+                        "Kashmiri",
+                        "Kikuyu",
+                        "Kinyarwanda",
+                        "Konkani",
+                        "Kurdish",
+                        "Lingala",
+                        "Luxembourgish",
+                        "Luganda",
+                        "Malagasy",
+                        "Manipuri",
+                        "Maori",
+                        "Mongolian",
+                        "Nigerian Pidgin",
+                        "Nyanja",
+                        "Odia",
+                        "Oromo",
+                        "Papiamento",
+                        "Pashto",
+                        "Quechua",
+                        "Samoan",
+                        "Sanskrit",
+                        "Scottish Gaelic",
+                        "Sepedi",
+                        "Shona",
+                        "Sindhi",
+                        "Somali",
+                        "Sotho",
+                        "Sundanese",
+                        "Tajik",
+                        "Tamazight",
+                        "Tetum",
+                        "Tibetan",
+                        "Tongan",
+                        "Tsonga",
+                        "Tswana",
+                        "Twi",
+                        "Uzbek",
+                        "Wolof",
+                        "Xhosa",
+                        "Khasi"
+                      ]
+                    }
+                  },
+                  "location": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "datePreset": {
+                    "type": "string",
+                    "enum": [
+                      "today",
+                      "yesterday",
+                      "last-3-days",
+                      "last-7-days",
+                      "this-week",
+                      "last-week",
+                      "last-14-days",
+                      "last-30-days",
+                      "this-month",
+                      "last-month",
+                      "last-3-months",
+                      "last-6-months",
+                      "year-to-date",
+                      "last-year"
+                    ]
+                  },
+                  "startDate": {
+                    "type": "string"
+                  },
+                  "endDate": {
+                    "type": "string"
+                  },
+                  "minDaysRun": {
+                    "type": "number"
+                  },
+                  "maxDaysRun": {
+                    "type": "number"
+                  },
+                  "minViewCount": {
+                    "type": "number"
+                  },
+                  "maxViewCount": {
+                    "type": "number"
+                  },
+                  "landingPage": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "landingPageMatch": {
+                    "type": "string",
+                    "enum": [
+                      "contains",
+                      "equals"
+                    ]
+                  },
+                  "lowImpressions": {
+                    "type": "boolean"
+                  },
+                  "partnershipAd": {
+                    "type": "boolean"
+                  },
+                  "crossposted": {
+                    "type": "boolean"
+                  },
+                  "sortBy": {
+                    "type": "string",
+                    "enum": [
+                      "MOST_RECENT",
+                      "OLDEST",
+                      "LONGEST_RUN",
+                      "MOST_IMPRESSIONS",
+                      "MOST_LIKES",
+                      "MOST_COMMENTS",
+                      "MOST_VIEWS",
+                      "HIGHEST_ENGAGEMENT",
+                      "HIGHEST_OUTLIER"
+                    ]
+                  },
+                  "limit": {
+                    "default": 100,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2000
+                  },
+                  "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9999
+                  }
+                }
+              },
+              "example": {
+                "query": "comfort-focused video ads",
+                "limit": 20
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Matching creatives.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "media": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "platformId": {
+                            "type": "string"
+                          },
+                          "brand": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "facebookAdLibraryId": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "BRAND",
+                                          "CREATOR"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "igUsername": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "igFollowers": {
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ]
+                                  },
+                                  "tiktokUsername": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "tiktokFollowers": {
+                                    "type": [
+                                      "number",
+                                      "null"
+                                    ]
+                                  },
+                                  "facebookUsername": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "thumbnailUrl": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "category": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "facebookAdLibraryId",
+                                  "name",
+                                  "type",
+                                  "igUsername",
+                                  "igFollowers",
+                                  "tiktokUsername",
+                                  "tiktokFollowers",
+                                  "facebookUsername",
+                                  "thumbnailUrl",
+                                  "category"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "title": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "type": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "DPA",
+                                  "VIDEO",
+                                  "CAROUSEL",
+                                  "IMAGE",
+                                  "DCO"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "mediaType": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "VIDEO",
+                                  "IMAGE"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "urls": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "thumbnailUrl": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "width": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "height": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "durationInSeconds": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "platforms": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "hook": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "summary": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "coreAngle": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "targetPersona": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "painPoints": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "sellingPoints": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ugcCharacter": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "ageRange": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "0-18",
+                                          "18-24",
+                                          "25-34",
+                                          "35-44",
+                                          "45-54",
+                                          "55-64",
+                                          "65+"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "gender": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "male",
+                                          "female",
+                                          "other"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "ethnicity": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": [
+                                          "White",
+                                          "Black",
+                                          "Asian",
+                                          "Hispanic",
+                                          "Middle Eastern",
+                                          "Indigenous",
+                                          "Pacific Islander"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "description": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "ageRange",
+                                  "gender",
+                                  "ethnicity",
+                                  "description"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "startAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "endAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "daysRun": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "categories": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "carouselCount": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "viewCount": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "likeCount": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "commentCount": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "impressionPercentile": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "impressionsText": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "platformId",
+                          "brand",
+                          "title",
+                          "type",
+                          "mediaType",
+                          "url",
+                          "urls",
+                          "thumbnailUrl",
+                          "width",
+                          "height",
+                          "durationInSeconds",
+                          "platforms",
+                          "hook",
+                          "summary",
+                          "coreAngle",
+                          "targetPersona",
+                          "ugcCharacter",
+                          "startAt",
+                          "endAt",
+                          "daysRun",
+                          "categories",
+                          "carouselCount",
+                          "viewCount",
+                          "likeCount",
+                          "commentCount",
+                          "impressionPercentile",
+                          "impressionsText"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "media"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/BrandNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/account/{id}/insights": {
+      "get": {
+        "operationId": "getBrandMediaInsights",
+        "tags": [
+          "Search"
+        ],
+        "summary": "Get an account's creative insights",
+        "description": "Return clustered creative themes for an account. `MEDIA_MIX` returns a\nbreakdown by media type; the other types return weekly buckets plus\nranked totals, highest first.\n\n`maxDaysBack` filters both the weekly bucket series and ranked\n`totals` to creatives that started within the requested window.\n\nLimited to 120 requests per minute per user.\nCosts 1,000 microdollars ($0.0010) per cluster returned, charged against your plan's monthly credits. The count field is what you were charged for.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Brand or creator id returned by POST /brands or POST /creators.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "HOOK",
+                "TARGET_PERSONA",
+                "AD_ANGLE",
+                "MEDIA_MIX"
+              ]
+            },
+            "example": "HOOK"
+          },
+          {
+            "name": "maxDaysBack",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 90
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Creative insights for the account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "MEDIA_MIX"
+                        },
+                        "count": {
+                          "type": "integer"
+                        },
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "count"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "count",
+                        "rows"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "HOOK",
+                            "TARGET_PERSONA",
+                            "AD_ANGLE"
+                          ]
+                        },
+                        "count": {
+                          "type": "integer"
+                        },
+                        "buckets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "year": {
+                                "type": "number"
+                              },
+                              "week": {
+                                "type": "number"
+                              },
+                              "clusters": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "label": {
+                                      "type": "string"
+                                    },
+                                    "rawDelta": {
+                                      "type": "number"
+                                    },
+                                    "percentDelta": {
+                                      "type": [
+                                        "number",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "label",
+                                    "rawDelta",
+                                    "percentDelta"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "year",
+                              "week",
+                              "clusters"
+                            ]
+                          }
+                        },
+                        "totals": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "tags": {
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "total": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "tags",
+                              "total"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "count",
+                        "buckets",
+                        "totals"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/BrandNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/account/{id}/landing-pages": {
+      "get": {
+        "operationId": "getBrandLandingPages",
+        "tags": [
+          "Search"
+        ],
+        "summary": "Get a brand's landing pages",
+        "description": "Return the landing-page URLs a brand sends ad traffic to, ranked by\nhow often they appear across its ads.\n\nLimited to 120 requests per minute per user.\nCosts 5,000 microdollars ($0.0050) per landing page returned, charged against your plan's monthly credits. The count field is what you were charged for.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Brand or creator id returned by POST /brands or POST /creators.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "showInactive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "example": "false"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Landing pages for the brand.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "landingPages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "total"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "landingPages"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/BrandNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/team/credit-usage": {
+      "get": {
+        "operationId": "getCreditUsage",
+        "tags": [
+          "Account"
+        ],
+        "summary": "Get the team's credit usage",
+        "description": "Credits left on the API key's team, the credits included in the\nplan, and the current billing period. Granted credits count toward\n`remainingCredits` and not `planCredits`.\n\nLimited to 120 requests per minute per user.\nThis call is free and does not use credits. It still responds when\nthe team is out of credits.",
+        "responses": {
+          "200": {
+            "description": "Credit balance for the current billing period.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "remainingCredits": {
+                      "type": "integer",
+                      "description": "Credits left in this billing period, including granted credits."
+                    },
+                    "planCredits": {
+                      "type": "integer",
+                      "description": "Credits included in the team's plan for this billing period."
+                    },
+                    "billingPeriodStart": {
+                      "type": "string",
+                      "description": "Start of the current billing period, UTC."
+                    },
+                    "billingPeriodEnd": {
+                      "type": "string",
+                      "description": "End of the current billing period, UTC."
+                    }
+                  },
+                  "required": [
+                    "remainingCredits",
+                    "planCredits",
+                    "billingPeriodStart",
+                    "billingPeriodEnd"
+                  ],
+                  "example": {
+                    "remainingCredits": 1000,
+                    "planCredits": 500000,
+                    "billingPeriodStart": "2025-01-01T00:00:00Z",
+                    "billingPeriodEnd": "2025-01-31T23:59:59Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/comments": {
+      "post": {
+        "operationId": "getComments",
+        "tags": [
+          "Search"
+        ],
+        "summary": "Fetch Instagram or TikTok comments",
+        "description": "Return public comments for specific Instagram or TikTok posts.\nPass post URLs or the platform id. At least one of `instagramIds` or\n`tiktokIds` is required (max 20 each). `limit` is comment pages\nper post (default 1, max 20).\n\nInstagram accepts a shortcode or a post URL:\n\n- `C2xY9abcD1e`\n- `https://www.instagram.com/p/C2xY9abcD1e/`\n- `https://www.instagram.com/reel/C2xY9abcD1e/`\n\nTikTok accepts a video id or a post URL:\n\n- `7234567890123456789`\n- `https://www.tiktok.com/@nike/video/7234567890123456789`\n\nRecent posts may be scraped live; older posts with stored comments\nare served from cache.\n\nLimited to 20 requests per minute per user.\nCosts 10,000 microdollars ($0.0100) per successful page of comments returned, charged against your plan's monthly credits.\nEach comment page fetched live (`limit`, default 1) is one billed\nunit. Cached posts do not scrape and are not billed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "instagramIds": {
+                    "description": "Instagram post shortcodes or post URLs",
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "tiktokIds": {
+                    "description": "TikTok video ids or post URLs",
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "limit": {
+                    "description": "Comment pages to fetch per post. Default 1.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20
+                  }
+                }
+              },
+              "example": {
+                "instagramIds": [
+                  "https://www.instagram.com/p/C2xY9abcD1e/"
+                ],
+                "tiktokIds": [
+                  "https://www.tiktok.com/@nike/video/7234567890123456789"
+                ],
+                "limit": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Comments grouped by post.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "posts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "platform": {
+                            "type": "string"
+                          },
+                          "platformPostId": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          },
+                          "comments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "platformId": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                },
+                                "likeCount": {
+                                  "type": "number"
+                                },
+                                "replyCount": {
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
+                                "publishedAt": {
+                                  "type": "string"
+                                },
+                                "isPinned": {
+                                  "type": [
+                                    "boolean",
+                                    "null"
+                                  ]
+                                },
+                                "username": {
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "type": "string"
+                                },
+                                "isVerified": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "platformId",
+                                "text",
+                                "likeCount",
+                                "replyCount",
+                                "publishedAt",
+                                "isPinned",
+                                "username",
+                                "displayName",
+                                "isVerified"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "platform",
+                          "platformPostId",
+                          "comments"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "posts"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "402": {
+            "$ref": "#/components/responses/OutOfCredits"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/account/index": {
+      "post": {
+        "operationId": "indexBrand",
+        "tags": [
+          "Indexing"
+        ],
+        "summary": "Index a brand by website URL",
+        "description": "Look up a brand by website URL, or start indexing it if we do not\nhave it yet. Pass a single `websiteUrl`. Instagram and TikTok\nprofile URLs are accepted and resolved as creators.\n\nThis endpoint does not consume credits. An existing brand returns\n`status: \"already_exists\"`. A new brand is created and sync is\nqueued, returning `status: \"indexing\"` and the new `brandId`.\n\nLimited to 50 requests per minute per user.\nThis call is free.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "websiteUrl": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "websiteUrl"
+                ]
+              },
+              "example": {
+                "websiteUrl": "https://www.nike.com"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The brand id and whether indexing was started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "brandId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "already_exists",
+                        "indexing"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "brandId",
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/account/{id}/index-status": {
+      "get": {
+        "operationId": "indexBrandStatus",
+        "tags": [
+          "Indexing"
+        ],
+        "summary": "Check brand indexing status",
+        "description": "Poll whether a brand finished indexing after POST /account/index.\n\nLimited to 300 requests per minute per user.\nThis call is free.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Brand or creator id returned by POST /brands or POST /creators.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether the brand is still indexing or ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "indexing",
+                        "ready"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/InvalidApiKey"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/BrandNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API key from Settings → API, prefixed sg_live_."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid_request",
+                  "invalid_api_key",
+                  "payload_too_large",
+                  "out_of_credits",
+                  "membership_ended",
+                  "subscription_inactive",
+                  "brand_not_found",
+                  "not_found",
+                  "method_not_allowed",
+                  "rate_limited",
+                  "internal_error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "PayloadTooLarge": {
+        "description": "The request body exceeds the 100 KB limit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "The HTTP method is not supported on this path. The Allow header lists what is. HEAD is refused on metered GET endpoints because it would be billed without returning data.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InvalidRequest": {
+        "description": "The request body or query string failed validation. `details` lists the offending fields.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InvalidApiKey": {
+        "description": "The API key is missing, malformed, unknown, or revoked.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "OutOfCredits": {
+        "description": "The team's monthly credits are exhausted.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The team's subscription is inactive, or your membership of it has ended.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "BrandNotFound": {
+        "description": "No brand matches that id.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Too many requests for this user on this endpoint. Carries a Retry-After header. The per-minute limit is stated on the operation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Something went wrong on our side.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

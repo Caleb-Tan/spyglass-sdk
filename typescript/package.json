@@ -1,0 +1,40 @@
+{
+  "name": "@spyglass/sdk",
+  "version": "0.1.0",
+  "description": "The API layer for the social internet. Search brands, creators, and the ads they run.",
+  "homepage": "https://spyglass.so",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Caleb-Tan/spyglass-sdk.git",
+    "directory": "typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/Caleb-Tan/spyglass-sdk/issues"
+  },
+  "keywords": ["spyglass", "ads", "advertising", "creators", "api", "sdk"],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "generate": "openapi-typescript ../openapi/openapi-v2.json -o src/generated.ts",
+    "build": "tsc",
+    "test": "tsx --test src/client.test.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "openapi-typescript": "^7.13.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
